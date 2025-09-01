@@ -1,0 +1,233 @@
+@page "/admin/codes"
+@inject DailyCodeService CodeService
+@inject IJSRuntime JSRuntime
+@using MyWheelApp.Services
+@using System.Text.Json
+
+<PageTitle>My Wheel - Daily Code Generator</PageTitle>
+
+<div class="admin-container">
+    <div class="admin-header">
+        <h1>?? Daily Code Generator</h1>
+        <p>Generate daily access codes for the wheel application</p>
+    </div>
+
+    <div class="admin-content">
+        <div class="code-generator">
+            <div class="current-code-section">
+                <h2>?? Today's Code</h2>
+                <div class="today-code-card">
+                    <div class="code-display">
+                        <span class="code-label">Today (@DateTime.Today.ToString("MMM dd, yyyy")):</span>
+                        <span class="code-value">@todaysCode</span>
+                        <button class="btn btn-copy" @onclick="() => CopyToClipboard(todaysCode)" title="Copy to clipboard">
+                            ??
+                        </button>
+                    </div>
+                    <div class="code-info">
+                        <small>This code is valid for 24 hours from midnight</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bulk-generator-section">
+                <h2>?? Bulk Code Generation</h2>
+                <div class="bulk-controls">
+                    <div class="form-group">
+                        <label for="startDate">Start Date:</label>
+                        <input type="date" id="startDate" @bind="startDate" class="form-control" />
+                    </div>
+                    <div class="form-group">
+                        <label for="dayCount">Number of Days:</label>
+                        <input type="number" id="dayCount" @bind="dayCount" min="1" max="365" class="form-control" />
+                    </div>
+                    <button class="btn btn-generate" @onclick="GenerateBulkCodes">
+                        ?? Generate Codes
+                    </button>
+                </div>
+            </div>
+
+            @if (generatedCodes.Any())
+            {
+                <div class="codes-list-section">
+                    <div class="codes-header">
+                        <h2>?? Generated Codes</h2>
+                        <div class="codes-actions">
+                            <button class="btn btn-download" @onclick="DownloadCodesAsJson">
+                                ?? Download JSON
+                            </button>
+                            <button class="btn btn-download" @onclick="DownloadCodesAsCsv">
+                                ?? Download CSV
+                            </button>
+                            <button class="btn btn-copy-all" @onclick="CopyAllCodes">
+                                ?? Copy All
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="codes-list">
+                        @foreach (var (date, codeValue) in generatedCodes)
+                        {
+                            <div class="code-item @(date.Date == DateTime.Today ? "today" : "")">
+                                <div class="code-date">
+                                    <span class="day-name">@date.ToString("dddd")</span>
+                                    <span class="date-value">@date.ToString("MMM dd, yyyy")</span>
+                                    @if (date.Date == DateTime.Today)
+                                    {
+                                        <span class="today-badge">Today</span>
+                                    }
+                                </div>
+                                <div class="code-display">
+                                    <span class="code-value">@codeValue</span>
+                                    <button class="btn btn-copy-small" @onclick="() => CopyToClipboard(codeValue)" title="Copy">
+                                        ??
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <div class="usage-section">
+                <h2>?? Usage Instructions</h2>
+                <div class="instructions">
+                    <div class="instruction-item">
+                        <span class="step-number">1</span>
+                        <div class="step-content">
+                            <strong>Generate Today's Code:</strong> The current day's code is automatically displayed above.
+                        </div>
+                    </div>
+                    <div class="instruction-item">
+                        <span class="step-number">2</span>
+                        <div class="step-content">
+                            <strong>Share the Code:</strong> Give today's code to users who need access to the wheel.
+                        </div>
+                    </div>
+                    <div class="instruction-item">
+                        <span class="step-number">3</span>
+                        <div class="step-content">
+                            <strong>Daily Reset:</strong> Codes automatically change at midnight and expire after 24 hours.
+                        </div>
+                    </div>
+                    <div class="instruction-item">
+                        <span class="step-number">4</span>
+                        <div class="step-content">
+                            <strong>Access Control:</strong> Each code can only be used once per device per day.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(message))
+            {
+                <div class="message @(isSuccess ? "success" : "error")">
+                    <span class="message-icon">@(isSuccess ? "?" : "?")</span>
+                    <span>@message</span>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private DateTime startDate = DateTime.Today;
+    private int dayCount = 7;
+    private List<(DateTime Date, string Code)> generatedCodes = new();
+    private string todaysCode = "";
+    private string message = "";
+    private bool isSuccess = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        todaysCode = await CodeService.GetTodaysCodeAsync();
+    }
+
+    private async Task GenerateBulkCodes()
+    {
+        try
+        {
+            generatedCodes = await CodeService.GenerateCodesForDateRangeAsync(startDate, dayCount);
+            message = $"Generated {generatedCodes.Count} codes successfully!";
+            isSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            message = $"Error generating codes: {ex.Message}";
+            isSuccess = false;
+        }
+        
+        StateHasChanged();
+        
+        // Clear message after 5 seconds
+        await Task.Delay(5000);
+        message = "";
+        StateHasChanged();
+    }
+
+    private async Task CopyToClipboard(string text)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            message = "Code copied to clipboard!";
+            isSuccess = true;
+        }
+        catch
+        {
+            // Fallback for older browsers
+            await JSRuntime.InvokeVoidAsync("copyToClipboardFallback", text);
+            message = "Code copied to clipboard!";
+            isSuccess = true;
+        }
+        
+        StateHasChanged();
+        
+        // Clear message after 3 seconds
+        await Task.Delay(3000);
+        message = "";
+        StateHasChanged();
+    }
+
+    private async Task CopyAllCodes()
+    {
+        var allCodes = string.Join("\n", generatedCodes.Select(c => $"{c.Date:yyyy-MM-dd}: {c.Code}"));
+        await CopyToClipboard(allCodes);
+    }
+
+    private async Task DownloadCodesAsJson()
+    {
+        var codesData = generatedCodes.Select(c => new 
+        {
+            date = c.Date.ToString("yyyy-MM-dd"),
+            dayOfWeek = c.Date.ToString("dddd"),
+            code = c.Code
+        });
+        
+        var json = JsonSerializer.Serialize(codesData, new JsonSerializerOptions 
+        { 
+            WriteIndented = true 
+        });
+        
+        var fileName = $"wheel-codes-{DateTime.Now:yyyy-MM-dd}.json";
+        await JSRuntime.InvokeVoidAsync("downloadJson", fileName, json);
+        
+        message = "Codes downloaded as JSON!";
+        isSuccess = true;
+        StateHasChanged();
+    }
+
+    private async Task DownloadCodesAsCsv()
+    {
+        var csv = "Date,Day of Week,Code\n";
+        csv += string.Join("\n", generatedCodes.Select(c => 
+            $"{c.Date:yyyy-MM-dd},{c.Date:dddd},{c.Code}"));
+        
+        var fileName = $"wheel-codes-{DateTime.Now:yyyy-MM-dd}.csv";
+        await JSRuntime.InvokeVoidAsync("downloadText", fileName, csv, "text/csv");
+        
+        message = "Codes downloaded as CSV!";
+        isSuccess = true;
+        StateHasChanged();
+    }
+}

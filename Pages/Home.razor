@@ -1,0 +1,645 @@
+﻿@page "/"
+@inject IJSRuntime JSRuntime
+@inject WheelConfigurationService ConfigService
+@inject DailyCodeService CodeService
+@inject IRecipeService RecipeService
+@inject NavigationManager Navigation
+@using MyWheelApp.Models
+@using MyWheelApp.Services
+@implements IDisposable
+
+<PageTitle>My Wheel - Recipe Spinner</PageTitle>
+
+<div class="wheel-container">
+    <div class="main-content">
+        <div class="wheel-section-container">
+            <div class="config-button-container">
+                <button class="config-button" @onclick="NavigateToConfig" title="Configuration">⚙️</button>
+            </div>
+            
+            <div class="wheel-wrapper">
+                <div class="wheel-pointer"></div>
+                @if (wheelConfig != null)
+                {
+                    <svg class="wheel @(isSpinning ? "spinning" : "")" id="wheel" style="@GetWheelStyle()" 
+                         viewBox="0 0 500 500">
+                        @for (int i = 0; i < wheelConfig.Items.Count; i++)
+                        {
+                            var anglePerSlice = 360.0 / wheelConfig.Items.Count;
+                            var startAngle = i * anglePerSlice;
+                            var endAngle = (i + 1) * anglePerSlice;
+                            var backgroundColor = wheelConfig.Items[i].Color;
+                            var pathData = GetWedgePath(250, 250, 240, startAngle, endAngle);
+                            var textAngle = (startAngle + anglePerSlice / 2) + 90; // Middle of wedge + 90 degrees
+                            var textRadius = GetTextRadius();
+                            var textPosition = GetTextPosition(250, 250, textRadius, startAngle + anglePerSlice / 2);
+                            
+                            <g class="wheel-section">
+                                <path d="@pathData" fill="@backgroundColor" stroke="#fff" stroke-width="3"/>
+                                <!-- Desktop text positioning -->
+                                @{
+                                    var desktopLines = WrapText(wheelConfig.Items[i].Text, 13);
+                                    var desktopVerticalOffset = -(desktopLines.Count - 1) * 0.6;
+                                }
+                                <text x="@textPosition.X" y="@textPosition.Y" 
+                                      text-anchor="middle" 
+                                      dominant-baseline="middle"
+                                      transform="rotate(@textAngle, @textPosition.X, @textPosition.Y)"
+                                      class="slice-text desktop-text">
+                                    @for (int lineIndex = 0; lineIndex < desktopLines.Count; lineIndex++)
+                                    {
+                                        <tspan x="@textPosition.X" dy="@(lineIndex == 0 ? desktopVerticalOffset + "em" : "1.2em")">@desktopLines[lineIndex]</tspan>
+                                    }
+                                </text>
+                                <!-- Mobile text positioning (10px closer to center) -->
+                                @{
+                                    var mobileTextPosition = GetTextPosition(250, 250, textRadius - 10, startAngle + anglePerSlice / 2);
+                                    var mobileLines = WrapText(wheelConfig.Items[i].Text, 11);
+                                    var mobileVerticalOffset = -(mobileLines.Count - 1) * 0.6;
+                                }
+                                <text x="@mobileTextPosition.X" y="@mobileTextPosition.Y" 
+                                      text-anchor="middle" 
+                                      dominant-baseline="middle"
+                                      transform="rotate(@textAngle, @mobileTextPosition.X, @mobileTextPosition.Y)"
+                                      class="slice-text mobile-text">
+                                    @for (int lineIndex = 0; lineIndex < mobileLines.Count; lineIndex++)
+                                    {
+                                        <tspan x="@mobileTextPosition.X" dy="@(lineIndex == 0 ? mobileVerticalOffset + "em" : "1.2em")">@mobileLines[lineIndex]</tspan>
+                                    }
+                                </text>
+                            </g>
+                        }
+                        <circle cx="250" cy="250" r="35" fill="white" stroke="#333" stroke-width="5" 
+                                class="center-circle @(isSpinning ? "stop-button" : "")" 
+                                @onclick="StopWheelIfSpinning"/>
+                    </svg>
+                    @if (isSpinning)
+                    {
+                        <div class="stop-text-overlay">STOP</div>
+                    }
+                }
+                else
+                {
+                    <div class="loading-wheel">Loading wheel...</div>
+                }
+            </div>
+            
+            <div class="btn-group">
+                <button class="btn btn-spin" @onclick="SpinWheel" disabled="@isSpinning">
+                    @(isSpinning ? "Spinning..." : "Spin Wheel")
+                </button>
+                <button class="btn btn-recipe" @onclick="GenerateRecipe" disabled="@(isSpinning || selectedItem == null || isGeneratingRecipe || !hasRecipeAccess)">
+                    @if (isGeneratingRecipe)
+                    {
+                        <span class="spinner" aria-hidden="true"></span>
+                        <span>Generating Recipe...</span>
+                    }
+                    else if (!hasRecipeAccess)
+                    {
+                        <span>🔐 Recipe Locked</span>
+                    }
+                    else
+                    {
+                        <span>🍽️ Get Recipe</span>
+                    }
+                </button>
+            </div>
+            
+            <div class="selection-message fade-in">
+                @if (!string.IsNullOrEmpty(selectionMessage))
+                {
+                    <div class="selection-text">
+                        @if (selectedItem != null)
+                        {
+                            <span>🎉 You got: <span class="selection-highlight">@selectedItem</span>! 🎉</span>
+                        }
+                        else
+                        {
+                            <span>@selectionMessage</span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="selection-text">Click "Spin Wheel" to start! 🎲</div>
+                }
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="error-message">
+                    @errorMessage
+                </div>
+            }
+
+            @if (!hasRecipeAccess)
+            {
+                <div class="recipe-access-prompt">
+                    <p style="color: #ffffff; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">🔐 Want to unlock recipe access? Enter today's code!</p>
+                    <button class="btn btn-access-code" @onclick="NavigateToAccessPage">
+                        Get Recipe Access
+                    </button>
+                </div>
+            }
+
+            @* Debug info - commented out for production but kept for future debugging
+            <div class="debug-info" style="background: #f0f0f0; padding: 1rem; margin-top: 1rem; border-radius: 8px; font-size: 0.9rem;">
+                <p><strong>Debug Info:</strong></p>
+                <p>Has Recipe Access: @hasRecipeAccess</p>
+                <p>Selected Item: @(selectedItem ?? "None")</p>
+                <p>Current Time: @DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")</p>
+                <button class="btn" @onclick="GetDebugInfo" style="margin-top: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                    Refresh Debug Info
+                </button>
+                @if (!string.IsNullOrEmpty(debugInfo))
+                {
+                    <div style="margin-top: 0.5rem; font-family: monospace; font-size: 0.8rem;">
+                        @((MarkupString)debugInfo.Replace("\n", "<br/>"))
+                    </div>
+                }
+            </div>
+            *@
+        </div>
+        
+        @if (wheelConfig != null)
+        {
+            <div class="recipe-list">
+                <h3 class="recipe-list-title">@wheelConfig.WheelName Options</h3>
+                @for (int i = 0; i < wheelConfig.Items.Count; i++)
+                {
+                    var item = wheelConfig.Items[i];
+                    var animationDelay = i * 0.1; // Stagger by 100ms each
+                    <div class="recipe-item @(selectedItem == item.Text ? "selected" : "")" 
+                         style="border-left: 6px solid @item.Color; animation-delay: @(animationDelay)s;">
+                        <div class="recipe-color" style="background-color: @item.Color;"></div>
+                        <div class="recipe-name">@item.Text</div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@if (generatedRecipe != null)
+{
+    <div class="recipe-details" @onclick="CloseRecipe">
+        <div class="recipe-card" @onclick:stopPropagation="true">
+            <div class="recipe-header">
+                <h2 class="recipe-title">@generatedRecipe.Name</h2>
+                <button class="close-recipe" @onclick="CloseRecipe">✕</button>
+            </div>
+            <div class="recipe-content">
+                <p class="recipe-description">@generatedRecipe.Description</p>
+                
+                <div class="recipe-info">
+                    <div class="info-item">
+                        <span>⏱️ Prep Time: @generatedRecipe.PrepTime</span>
+                    </div>
+                    <div class="info-item">
+                        <span>🔥 Cook Time: @generatedRecipe.CookTime</span>
+                    </div>
+                    <div class="info-item">
+                        <span>🕐 Total Time: @generatedRecipe.TotalTime</span>
+                    </div>
+                    <div class="info-item">
+                        <span>👥 Servings: @generatedRecipe.Servings</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="difficulty @generatedRecipe.Difficulty.ToLower()">
+                            @generatedRecipe.Difficulty
+                        </span>
+                    </div>
+                </div>
+
+                @if (generatedRecipe.Tags?.Count > 0)
+                {
+                    <div class="recipe-tags">
+                        @foreach (var tag in generatedRecipe.Tags)
+                        {
+                            <span class="recipe-tag">@tag</span>
+                        }
+                    </div>
+                }
+
+                <div class="recipe-sections">
+                    <div class="ingredients-section">
+                        <h3>🛒 Ingredients</h3>
+                        <ul class="ingredients-list">
+                            @if (generatedRecipe.Ingredients != null)
+                            {
+                                @foreach (var ingredient in generatedRecipe.Ingredients)
+                                {
+                                    <li>@ingredient</li>
+                                }
+                            }
+                        </ul>
+                    </div>
+                    
+                    <div class="instructions-section">
+                        <h3>👩‍🍳 Instructions</h3>
+                        <ol class="instructions-list">
+                            @if (generatedRecipe.Instructions != null)
+                            {
+                                @foreach (var instruction in generatedRecipe.Instructions)
+                                {
+                                    <li>@instruction</li>
+                                }
+                            }
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private WheelConfiguration? wheelConfig;
+    private bool isSpinning = false;
+    private string? selectedItem = null;
+    private string selectionMessage = "";
+    private string errorMessage = "";
+    private Random random = new Random();
+    private double currentRotation = 0;
+    private double targetRotation = 0;
+    private Recipe? generatedRecipe;
+    private bool isGeneratingRecipe = false;
+    private bool hasRecipeAccess = false; // Start with false - recipe is locked by default
+    private string debugInfo = "";
+    private CancellationTokenSource? spinCancellationTokenSource;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ConfigService.RefreshConfiguration();
+        wheelConfig = await ConfigService.LoadConfigurationAsync();
+        
+        // Check if user has recipe access - this should be false unless a valid code was entered
+        hasRecipeAccess = await CodeService.HasValidAccessAsync();
+        
+        // Get initial debug info
+        await GetDebugInfo();
+
+        // Force a state update to ensure UI reflects the access state
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Initialize the wheel rotation tracking in JavaScript
+            await JSRuntime.InvokeVoidAsync("initWheelRotation", currentRotation);
+            
+            // Check recipe access status when component first renders
+            await CheckRecipeAccess();
+            
+            // Set up periodic access check every 30 seconds
+            var timer = new System.Timers.Timer(30000); // 30 seconds
+            timer.Elapsed += async (sender, e) => 
+            {
+                await InvokeAsync(async () =>
+                {
+                    await CheckRecipeAccess();
+                });
+            };
+            timer.Start();
+        }
+    }
+
+    private async Task CheckRecipeAccess()
+    {
+        hasRecipeAccess = await CodeService.HasValidAccessAsync();
+        StateHasChanged();
+    }
+
+    private async Task NavigateToConfig()
+    {
+        // Simple conditional: if GitHub Pages, use full path; if local, use relative path
+        var isGitHubPages = Navigation.BaseUri.Contains("github.io");
+        
+        if (isGitHubPages)
+        {
+            await JSRuntime.InvokeVoidAsync("eval", "window.location.href = '/MyWheel/config'");
+        }
+        else
+        {
+            Navigation.NavigateTo("/config");
+        }
+    }
+
+    private async Task NavigateToAccessPage()
+    {
+        var isGitHubPages = Navigation.BaseUri.Contains("github.io");
+        
+        if (isGitHubPages)
+        {
+            await JSRuntime.InvokeVoidAsync("eval", "window.location.href = '/MyWheel/access'");
+        }
+        else
+        {
+            Navigation.NavigateTo("/access");
+        }
+    }
+
+    // Method to refresh access state (can be called when returning from access page)
+    public async Task RefreshRecipeAccess()
+    {
+        hasRecipeAccess = await CodeService.HasValidAccessAsync();
+        StateHasChanged();
+    }
+    
+    private async Task SpinWheel()
+    {
+        if (isSpinning) return;
+        
+        // Cancel any existing spin operation
+        spinCancellationTokenSource?.Cancel();
+        spinCancellationTokenSource = new CancellationTokenSource();
+        
+        // Stop any existing ticking sounds
+        await JSRuntime.InvokeVoidAsync("eval", "if (window.stopTicking) window.stopTicking();");
+        
+        if (wheelConfig == null) return;
+
+        isSpinning = true;
+        selectedItem = null;
+        selectionMessage = "Spinning...";
+        errorMessage = "";
+        StateHasChanged();
+        
+        // Play spin sound
+        await PlaySound("spin");
+        
+        // Calculate random rotation (more rotations for longer 5-second spin)
+        var spins = random.Next(6, 12); // 6-11 full rotations for 5-second duration
+        var finalAngle = random.Next(0, 360);
+        targetRotation = currentRotation + (spins * 360) + finalAngle;
+        
+        // Set CSS custom Properties for animation - 5 seconds for realistic deceleration
+        await JSRuntime.InvokeVoidAsync("setWheelRotation", targetRotation, 5000);
+        
+        try
+        {
+            // Wait for animation to complete, but allow cancellation
+            await Task.Delay(5000, spinCancellationTokenSource.Token);
+            
+            // Only complete the spin if we weren't cancelled
+            if (!spinCancellationTokenSource.Token.IsCancellationRequested)
+            {
+                await CompleteSpinOperation();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Spin was cancelled by stop button - don't complete the operation
+            return;
+        }
+    }
+
+    private async Task CompleteSpinOperation()
+    {
+        if (wheelConfig == null) return;
+        
+        // Calculate which item was selected
+        // The pointer is at the top (0 degrees position)
+        var normalizedAngle = (360 - (targetRotation % 360)) % 360;
+        var sectionAngle = 360.0 / wheelConfig.Items.Count;
+        var selectedIndex = (int)Math.Floor(normalizedAngle / sectionAngle);
+        
+        // Ensure the index is within bounds
+        selectedIndex = selectedIndex % wheelConfig.Items.Count;
+        
+        currentRotation = targetRotation % 360;
+        selectedItem = wheelConfig.Items[selectedIndex].Text;
+        isSpinning = false;
+        
+        // Update JavaScript tracking
+        await JSRuntime.InvokeVoidAsync("initWheelRotation", currentRotation);
+        
+        // Auto-select and show message immediately
+        selectionMessage = $"🎉 You got: {selectedItem}! 🎉";
+        
+        // Play selection sound
+        await PlaySound("select");
+        
+        StateHasChanged();
+    }
+
+    private async Task StopWheelIfSpinning()
+    {
+        if (!isSpinning || wheelConfig == null) return;
+
+        try
+        {
+            // Cancel the ongoing spin operation
+            spinCancellationTokenSource?.Cancel();
+            
+            // Call JavaScript to stop the wheel and get current rotation
+            var currentRotationFromJS = await JSRuntime.InvokeAsync<double>("stopWheelSpin");
+            
+            // Calculate which item was selected based on current rotation
+            var normalizedAngle = (360 - (currentRotationFromJS % 360)) % 360;
+            var sectionAngle = 360.0 / wheelConfig.Items.Count;
+            var selectedIndex = (int)Math.Floor(normalizedAngle / sectionAngle);
+            
+            // Ensure the index is within bounds
+            selectedIndex = selectedIndex % wheelConfig.Items.Count;
+            
+            // Update the current rotation and selected item
+            currentRotation = currentRotationFromJS % 360;
+            selectedItem = wheelConfig.Items[selectedIndex].Text;
+            isSpinning = false;
+            
+            // Show selection message
+            selectionMessage = $"🛑 Stopped! You got: {selectedItem}! 🎉";
+            
+            // Play selection sound
+            await PlaySound("select");
+            
+            StateHasChanged();
+        }
+        catch
+        {
+            // Fallback - just stop spinning and cancel the timer
+            spinCancellationTokenSource?.Cancel();
+            isSpinning = false;
+            selectionMessage = "Wheel stopped";
+            StateHasChanged();
+        }
+    }
+
+    private async Task GenerateRecipe()
+    {
+        if (selectedItem == null || !hasRecipeAccess) return;
+
+        isGeneratingRecipe = true;
+        errorMessage = "";
+        StateHasChanged();
+
+        try
+        {
+            generatedRecipe = await RecipeService.GenerateRecipeAsync(selectedItem);
+            if (generatedRecipe == null)
+            {
+                errorMessage = "Failed to generate recipe. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error generating recipe: {ex.Message}";
+        }
+        finally
+        {
+            isGeneratingRecipe = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseRecipe()
+    {
+        generatedRecipe = null;
+        StateHasChanged();
+    }
+    
+    private string GetWheelStyle()
+    {
+        return $"transform: rotate({currentRotation}deg);";
+    }
+    
+    private async Task PlaySound(string soundType)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("playSound", soundType);
+        }
+        catch
+        {
+            // Ignore sound errors
+        }
+    }
+    
+    
+    private string GetWedgePath(double centerX, double centerY, double radius, double startAngle, double endAngle)
+    {
+        var startAngleRad = (startAngle - 90) * Math.PI / 180; // Subtract 90 to start from top
+        var endAngleRad = (endAngle - 90) * Math.PI / 180;
+        
+        var startX = centerX + radius * Math.Cos(startAngleRad);
+        var startY = centerY + radius * Math.Sin(startAngleRad);
+        var endX = centerX + radius * Math.Cos(endAngleRad);
+        var endY = centerY + radius * Math.Sin(endAngleRad);
+        
+        var largeArcFlag = (endAngle - startAngle) > 180 ? 1 : 0;
+        
+        return $"M {centerX} {centerY} L {startX:F2} {startY:F2} A {radius} {radius} 0 {largeArcFlag} 1 {endX:F2} {endY:F2} Z";
+    }
+    
+    private (double X, double Y) GetTextPosition(double centerX, double centerY, double radius, double angle)
+    {
+        var angleRad = (angle - 90) * Math.PI / 180; // Subtract 90 to start from top
+        var x = centerX + radius * Math.Cos(angleRad);
+        var y = centerY + radius * Math.Sin(angleRad);
+        return (x, y);
+    }
+
+    private double GetTextRadius()
+    {
+        // For mobile (screen width <= 480px), use radius 160 (indented by 10px)
+        // For desktop, use radius 170
+        return 160; // Reduced by 10 pixels for mobile indent effect
+    }
+
+    private List<string> WrapText(string text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+            return new List<string> { text };
+
+        var words = text.Split(' ');
+        var lines = new List<string>();
+        var currentLine = "";
+
+        foreach (var word in words)
+        {
+            if (string.IsNullOrEmpty(currentLine))
+            {
+                currentLine = word;
+            }
+            else if ((currentLine + " " + word).Length <= maxLength)
+            {
+                currentLine += " " + word;
+            }
+            else
+            {
+                lines.Add(currentLine);
+                currentLine = word;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(currentLine))
+        {
+            lines.Add(currentLine);
+        }
+
+        return lines;
+    }
+
+    // New method to get debug information
+    private async Task GetDebugInfo()
+    {
+        try
+        {
+            var lastAccess = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "lastCodeAccess");
+            var deviceId = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "deviceId");
+            var todaysCode = await CodeService.GetTodaysCodeAsync();
+            
+            debugInfo = $"Today's Code: {todaysCode}\n";
+            debugInfo += $"Device ID: {deviceId ?? "None"}\n";
+            debugInfo += $"Last Access: {lastAccess ?? "None"}\n";
+            debugInfo += $"Today: {DateTime.Today:yyyy-MM-dd}\n";
+            debugInfo += $"Now: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n";
+            
+            if (!string.IsNullOrEmpty(lastAccess) && DateTime.TryParse(lastAccess, out var accessTime))
+            {
+                debugInfo += $"Access Date: {accessTime.Date:yyyy-MM-dd}\n";
+                debugInfo += $"Access Time: {accessTime:yyyy-MM-dd HH:mm:ss}\n";
+                debugInfo += $"Hours Since Access: {(DateTime.Now - accessTime).TotalHours:F2}\n";
+                debugInfo += $"Same Day: {accessTime.Date == DateTime.Today}\n";
+            }
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            debugInfo = $"Debug Error: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        spinCancellationTokenSource?.Cancel();
+        spinCancellationTokenSource?.Dispose();
+    }
+}
+
+<style>
+/* Small spinner for recipe generation */
+.btn-recipe .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    margin-right: 8px;
+    animation: sk-spin 0.8s linear infinite;
+    vertical-align: middle;
+}
+@@keyframes sk-spin { to { transform: rotate(360deg); } }
+
+/* Ensure disabled recipe button looks subdued */
+.btn-recipe[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+</style>

@@ -1,0 +1,37 @@
+{
+  "wheelName": "Recipe Wheel",
+  "items": [
+    {
+      "text": "Pizza Margherita",
+      "color": "#ff6b6b"
+    },
+    {
+      "text": "Chicken Curry",
+      "color": "#4ecdc4"
+    },
+    {
+      "text": "Beef Tacos",
+      "color": "#45b7d1"
+    },
+    {
+      "text": "Pasta Carbonara",
+      "color": "#96ceb4"
+    },
+    {
+      "text": "Salmon Teriyaki",
+      "color": "#feca57"
+    },
+    {
+      "text": "Vegetable Stir Fry",
+      "color": "#ff9ff3"
+    },
+    {
+      "text": "Greek Salad",
+      "color": "#54a0ff"
+    },
+    {
+      "text": "Chocolate Cake",
+      "color": "#5f27cd"
+    }
+  ]
+}

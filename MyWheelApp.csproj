@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
+    <BlazorWebAssemblyLoadAllGlobalizationData>false</BlazorWebAssemblyLoadAllGlobalizationData>
+    <BlazorWebAssemblyPreserveCollationData>false</BlazorWebAssemblyPreserveCollationData>
+    <UserSecretsId>mywheel-app-secrets</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="9.0.8" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="9.0.8" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.8" />
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.64.0" />
+  </ItemGroup>
+
+  <!-- Exclude server API project files from the Blazor WebAssembly compilation -->
+  <ItemGroup>
+    <Compile Remove="MyWheelApi\**\*.cs" />
+    <None Remove="MyWheelApi\**" />
+    <Content Remove="MyWheelApi\**" />
+    <!-- Exclude local admin console project files so they don't get compiled into the WASM app -->
+    <Compile Remove="MyWheelAdmin\**\*.cs" />
+    <None Remove="MyWheelAdmin\**" />
+    <Content Remove="MyWheelAdmin\**" />
+  </ItemGroup>
+
+</Project>

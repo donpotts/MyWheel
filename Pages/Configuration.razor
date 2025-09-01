@@ -1,0 +1,295 @@
+@page "/config"
+@inject WheelConfigurationService ConfigService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+@using MyWheelApp.Models
+@using MyWheelApp.Services
+@using System.Text.Json
+
+<PageTitle>My Wheel - Configuration</PageTitle>
+
+<div class="config-container">
+    <div class="config-header">
+        <h2>Wheel Configuration</h2>
+        <p>Customize your wheel items and colors</p>
+    </div>
+
+    @if (configuration != null)
+    {
+        <div class="config-form">
+            <div class="form-group">
+                <label for="wheelName">Wheel Name:</label>
+                <input type="text" id="wheelName" @bind="configuration.WheelName" 
+                       @bind:after="SaveConfigurationAsync" class="form-control" />
+            </div>
+
+            <div class="items-section">
+                <div class="items-header">
+                    <h3>Wheel Items</h3>
+                    <button class="btn btn-add" @onclick="AddItem">+ Add Item</button>
+                </div>
+
+                @for (int i = 0; i < configuration.Items.Count; i++)
+                {
+                    var index = i;
+                    <div class="item-row" style="animation-delay: @(i * 0.1)s;">
+                        <div class="item-controls">
+                            <input type="text" @bind="configuration.Items[index].Text" 
+                                   @bind:after="SaveConfigurationAsync"
+                                   class="form-control text-input" placeholder="Item text" />
+                            <input type="color" @bind="configuration.Items[index].Color" 
+                                   @bind:after="SaveConfigurationAsync"
+                                   class="color-input" />
+                            <button class="btn btn-remove" @onclick="() => RemoveItem(index)">×</button>
+                        </div>
+                        <div class="item-preview" style="background-color: @configuration.Items[index].Color;">
+                            @configuration.Items[index].Text
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="upload-section">
+                <div class="upload-header">
+                    <h3>📁 Load Configuration</h3>
+                    <p>Upload a JSON file to apply your custom wheel configuration</p>
+                </div>
+                <div class="upload-controls">
+                    <input type="file" accept=".json" class="file-input" @ref="fileInputElement" @onchange="HandleFileUploadHtml" />
+                    <div class="btn btn-upload" @onclick="TriggerFileInput">
+                        <span class="upload-icon">📤</span>
+                        <span class="upload-text">Choose JSON File</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="config-actions">
+                <button class="btn btn-save" @onclick="SaveConfiguration">Save Configuration</button>
+                <button class="btn btn-preview" @onclick="GoToWheel">Preview Wheel</button>
+                <button class="btn btn-reset" @onclick="ResetToDefault">Reset to Default</button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(saveMessage))
+            {
+                <div class="save-message @(saveSuccess ? "success" : "error")">
+                    @saveMessage
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="loading">Loading configuration...</div>
+    }
+</div>
+
+@code {
+    private WheelConfiguration? configuration;
+    private string saveMessage = "";
+    private bool saveSuccess = false;
+    private ElementReference fileInputElement;
+
+    protected override async Task OnInitializedAsync()
+    {
+        configuration = await ConfigService.LoadConfigurationAsync();
+    }
+
+    private async Task AddItem()
+    {
+        if (configuration != null)
+        {
+            configuration.Items.Add(new WheelItem { Text = "New Item", Color = "#ff6b6b" });
+            await ConfigService.SaveConfigurationAsync(configuration);
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveItem(int index)
+    {
+        if (configuration != null && configuration.Items.Count > 2)
+        {
+            configuration.Items.RemoveAt(index);
+            await ConfigService.SaveConfigurationAsync(configuration);
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveConfiguration()
+    {
+        if (configuration == null) return;
+
+        try
+        {
+            // Save to localStorage first
+            await ConfigService.SaveConfigurationAsync(configuration);
+            
+            // Then prepare download
+            var json = JsonSerializer.Serialize(configuration, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                WriteIndented = true
+            });
+
+            await JSRuntime.InvokeVoidAsync("downloadJson", "wheel-config.json", json);
+            
+            saveMessage = "Configuration saved and downloaded! Changes are now active.";
+            saveSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"Error saving configuration: {ex.Message}";
+            saveSuccess = false;
+        }
+
+        StateHasChanged();
+        await Task.Delay(5000);
+        saveMessage = "";
+        StateHasChanged();
+    }
+
+    private async Task GoToWheel()
+    {
+        if (configuration != null)
+        {
+            await ConfigService.SaveConfigurationAsync(configuration);
+        }
+
+        // Detect if running on GitHub Pages by checking the base URI
+        var isGitHubPages = Navigation.BaseUri.Contains("github.io");
+
+        if (isGitHubPages)
+        {
+            // For GitHub Pages, use the full repository path
+            await JSRuntime.InvokeVoidAsync("eval", "window.location.href = '/MyWheel/'");
+        }
+        else
+        {
+            // For local development, use root path
+            await JSRuntime.InvokeVoidAsync("eval", "window.location.href = '/'");
+        }
+    }
+
+    private void ResetToDefault()
+    {
+        configuration = new WheelConfiguration
+        {
+            WheelName = "Recipe Wheel",
+            Items = new List<WheelItem>
+            {
+                new() { Text = "Pizza Margherita", Color = "#ff6b6b" },
+                new() { Text = "Chicken Curry", Color = "#4ecdc4" },
+                new() { Text = "Beef Tacos", Color = "#45b7d1" },
+                new() { Text = "Pasta Carbonara", Color = "#96ceb4" },
+                new() { Text = "Salmon Teriyaki", Color = "#feca57" },
+                new() { Text = "Vegetable Stir Fry", Color = "#ff9ff3" },
+                new() { Text = "Greek Salad", Color = "#54a0ff" },
+                new() { Text = "Chocolate Cake", Color = "#5f27cd" }
+            }
+        };
+        StateHasChanged();
+    }
+
+    private async Task HandleFileUpload(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file.ContentType != "application/json")
+            {
+                saveMessage = "Please select a valid JSON file.";
+                saveSuccess = false;
+                StateHasChanged();
+                return;
+            }
+
+            using var stream = file.OpenReadStream();
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+
+            var loadedConfig = JsonSerializer.Deserialize<WheelConfiguration>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (loadedConfig?.Items?.Count > 0)
+            {
+                configuration = loadedConfig;
+                await ConfigService.SaveConfigurationAsync(loadedConfig);
+                saveMessage = "Configuration loaded and saved successfully!";
+                saveSuccess = true;
+            }
+            else
+            {
+                saveMessage = "Invalid configuration file format.";
+                saveSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"Error loading file: {ex.Message}";
+            saveSuccess = false;
+        }
+
+        StateHasChanged();
+        await Task.Delay(5000);
+        saveMessage = "";
+        StateHasChanged();
+    }
+
+    private async Task SaveConfigurationAsync()
+    {
+        if (configuration != null)
+        {
+            await ConfigService.SaveConfigurationAsync(configuration);
+        }
+    }
+
+    private async Task TriggerFileInput()
+    {
+        await JSRuntime.InvokeVoidAsync("clickFileInput", fileInputElement);
+    }
+
+    private async Task HandleFileUploadHtml(ChangeEventArgs e)
+    {
+        var files = await JSRuntime.InvokeAsync<string[]>("getSelectedFiles", fileInputElement);
+        if (files.Length > 0)
+        {
+            var fileContent = await JSRuntime.InvokeAsync<string>("readFileAsText", fileInputElement);
+            await ProcessFileContent(fileContent);
+        }
+    }
+
+    private async Task ProcessFileContent(string json)
+    {
+        try
+        {
+            var loadedConfig = JsonSerializer.Deserialize<WheelConfiguration>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (loadedConfig?.Items?.Count > 0)
+            {
+                configuration = loadedConfig;
+                await ConfigService.SaveConfigurationAsync(loadedConfig);
+                saveMessage = "Configuration loaded and saved successfully!";
+                saveSuccess = true;
+            }
+            else
+            {
+                saveMessage = "Invalid configuration file format.";
+                saveSuccess = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"Error loading file: {ex.Message}";
+            saveSuccess = false;
+        }
+
+        StateHasChanged();
+        await Task.Delay(5000);
+        saveMessage = "";
+        StateHasChanged();
+    }
+}

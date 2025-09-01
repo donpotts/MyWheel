@@ -1,0 +1,147 @@
+/* PWA-specific CSS styles */
+
+/* Install button styling is handled in JavaScript */
+
+/* Offline indicator */
+.offline-indicator {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #ff5722;
+    color: white;
+    text-align: center;
+    padding: 10px;
+    z-index: 1002;
+    transform: translateY(-100%);
+    transition: transform 0.3s ease;
+}
+
+.offline-indicator.show {
+    transform: translateY(0);
+}
+
+/* PWA splash screen styles for better loading experience */
+@media (display-mode: standalone) {
+    body {
+        user-select: none; /* Prevent text selection in standalone mode */
+    }
+    
+    /* Hide browser UI elements in standalone mode */
+    .browser-only {
+        display: none !important;
+    }
+}
+
+/* Custom splash screen for PWA */
+.pwa-splash {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    opacity: 1;
+    transition: opacity 0.5s ease;
+}
+
+.pwa-splash.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.pwa-splash .logo {
+    width: 120px;
+    height: 120px;
+    margin-bottom: 20px;
+    border-radius: 20px;
+}
+
+.pwa-splash .app-name {
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.pwa-splash .loading-text {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 16px;
+}
+
+/* App update notification */
+.update-notification {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    right: 20px;
+    background: #2196F3;
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 1001;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+}
+
+.update-notification.show {
+    transform: translateY(0);
+}
+
+.update-notification .message {
+    flex: 1;
+    font-weight: 500;
+}
+
+.update-notification .action-button {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.update-notification .action-button:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Mobile-specific PWA styles */
+@media (max-width: 768px) {
+    .pwa-splash .logo {
+        width: 100px;
+        height: 100px;
+    }
+    
+    .pwa-splash .app-name {
+        font-size: 20px;
+    }
+    
+    .update-notification {
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+    }
+}
+
+/* Hide elements when app is installed */
+.standalone-hidden {
+    display: block;
+}
+
+@media (display-mode: standalone) {
+    .standalone-hidden {
+        display: none;
+    }
+}

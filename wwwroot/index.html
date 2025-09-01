@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Wheel</title>
+    <meta name="description" content="A spinning recipe wheel with modern animations and sound effects for making decisions" />
+    
+    <!-- PWA Configuration -->
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#16213e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="My Wheel" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    
+    <!-- Meta tags for better SEO and social sharing -->
+    <meta property="og:title" content="My Wheel - Recipe Spinning Wheel" />
+    <meta property="og:description" content="A spinning recipe wheel with modern animations and sound effects for making decisions" />
+    <meta property="og:image" content="icon-192.png" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+    
+    <!-- GitHub Pages SPA fix -->
+    <script type="text/javascript">
+        // Single Page Apps for GitHub Pages
+        // MIT License
+        // https://github.com/rafgraph/spa-github-pages
+        (function(l) {
+            if (l.search[1] === '/' ) {
+                var decoded = l.search.slice(1).split('&').map(function(s) { 
+                    return s.replace(/~and~/g, '&')
+                }).join('?');
+                window.history.replaceState(null, null,
+                    l.pathname.slice(0, -1) + decoded + l.hash
+                );
+            }
+        }(window.location))
+    </script>
+
+    <!-- Base href will be set by deployment process -->
+    <base href="/" />
+    
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="css/code-input.css" />
+    <link rel="stylesheet" href="css/pwa.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link href="MyWheelApp.styles.css" rel="stylesheet" />
+</head>
+
+<body>
+    <div id="app">
+        <svg class="loading-progress">
+            <circle r="40%" cx="50%" cy="50%" />
+            <circle r="40%" cx="50%" cy="50%" />
+        </svg>
+        <div class="loading-progress-text"></div>
+    </div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+    <script src="js/wheel.js"></script>
+    <script src="js/pwa.js"></script>
+    <script src="_framework/blazor.webassembly.js"></script>
+</body>
+
+</html>

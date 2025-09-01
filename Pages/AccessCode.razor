@@ -1,0 +1,207 @@
+@page "/access"
+@inject DailyCodeService CodeService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@using MyWheelApp.Services
+@using MyWheelApp.Models
+
+<PageTitle>My Wheel - Access Code</PageTitle>
+
+<div class="access-container">
+    <div class="access-card">
+        <div class="access-header">
+            <h1>🎯 My Wheel Access</h1>
+            <p>Enter today's daily code to access the wheel</p>
+        </div>
+
+        <div class="access-form">
+            <div class="form-group">
+                <label for="codeInput">Daily Access Code:</label>
+                <input type="text" 
+                       id="codeInput" 
+                       @bind="inputCode" @bind:event="oninput"
+                       @onkeypress="HandleKeyPress"
+                       placeholder="Enter code"
+                       class="code-input @(hasError ? "error" : "")"
+                       maxlength="20"
+                       disabled="@isValidating" />
+            </div>
+
+            <button class="btn btn-access @(string.IsNullOrWhiteSpace(inputCode) ? "disabled" : "enabled")" 
+                    @onclick="ValidateCode" 
+                    disabled="@(isValidating || string.IsNullOrWhiteSpace(inputCode))">
+                @if (isValidating)
+                {
+                    <span class="spinner" aria-hidden="true"></span>
+                    <span>Validating...</span>
+                }
+                else
+                {
+                    <span>🔓 Access Wheel</span>
+                }
+            </button>
+
+            @if (!string.IsNullOrEmpty(message))
+            {
+                <div class="message @(isSuccess ? "success" : "error")">
+                    <span class="message-icon">@(isSuccess ? "✅" : "❌")</span>
+                    <span>@message</span>
+                </div>
+            }
+        </div>
+
+        <div class="access-info">
+            <div class="info-item">
+                <span class="info-icon">📅</span>
+                <span>Today: @DateTime.Today.ToString("dddd, MMMM dd, yyyy")</span>
+            </div>
+            <div class="info-item">
+                <span class="info-icon">⏰</span>
+                <span>Access expires at midnight</span>
+            </div>
+            <div class="info-item">
+                <span class="info-icon">🔑</span>
+                <span>Get your daily code from the admin</span>
+            </div>
+        </div>
+
+        @if (showDebugInfo)
+        {
+            <div class="debug-info">
+                <h4>Debug Information</h4>
+                <p><strong>Today's Code:</strong> @todaysCode</p>
+                <p><strong>Device ID:</strong> @deviceId</p>
+                <button class="btn btn-debug" @onclick="ClearAccess">Clear Access (Debug)</button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string inputCode = "";
+    private string message = "";
+    private bool isSuccess = false;
+    private bool hasError = false;
+    private bool isValidating = false;
+    private bool showDebugInfo = false;
+    private string todaysCode = "";
+    private string deviceId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if user already has access
+        var hasAccess = await CodeService.HasValidAccessAsync();
+        if (hasAccess)
+        {
+            await RedirectToWheel();
+            return;
+        }
+
+        // Get debug info
+        deviceId = await CodeService.GetDeviceIdAsync();
+        todaysCode = await CodeService.GetTodaysCodeAsync();
+        
+        // Show debug info in development (you can remove this in production)
+        showDebugInfo = true; // Set to false for production
+    }
+
+    private async Task ValidateCode()
+    {
+        if (string.IsNullOrWhiteSpace(inputCode)) return;
+
+        isValidating = true;
+        hasError = false;
+        message = "";
+        StateHasChanged();
+
+        try
+        {
+            var response = await CodeService.ValidateCodeAsync(inputCode);
+            
+            message = response.Message;
+            isSuccess = response.IsValid;
+            hasError = !response.IsValid;
+
+            if (response.IsValid)
+            {
+                // Wait a moment to show success message, then redirect back to wheel
+                await Task.Delay(1500);
+                await RedirectToWheel();
+            }
+        }
+        catch (Exception ex)
+        {
+            message = "An error occurred while validating the code.";
+            isSuccess = false;
+            hasError = true;
+        }
+        finally
+        {
+            isValidating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(inputCode) && !isValidating)
+        {
+            await ValidateCode();
+        }
+    }
+
+    private async Task RedirectToWheel()
+    {
+        var isGitHubPages = Navigation.BaseUri.Contains("github.io");
+        
+        if (isGitHubPages)
+        {
+            await JSRuntime.InvokeVoidAsync("eval", "window.location.href = '/MyWheel/'");
+        }
+        else
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+
+    private async Task ClearAccess()
+    {
+        await CodeService.ClearAccessAsync();
+        message = "Access cleared. You can now test the access code again.";
+        isSuccess = true;
+        hasError = false;
+        StateHasChanged();
+    }
+}
+
+<style>
+/* Access button enabled appearance */
+.btn-access.enabled {
+    background-color: #6a0dad; /* purple */
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.2);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+/* Access button disabled appearance (subdued) */
+.btn-access.disabled,
+.btn-access[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background-color: #9b59b6;
+    color: #f3eaff;
+}
+
+/* small spinner */
+.btn-access .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    margin-right: 8px;
+    animation: sk-spin 0.8s linear infinite;
+    vertical-align: middle;
+}
+</style>
